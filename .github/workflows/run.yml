@@ -1,0 +1,33 @@
+name: run
+on:
+  schedule:
+    - cron: "23 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      mode: { description: 'mode', required: false, default: 'incremental' }
+      job_id: { description: 'job id', required: false }
+concurrency: { group: run, cancel-in-progress: false }
+permissions: { contents: read }
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Checkout tools
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.CONTENT_REPO }}
+          token: ${{ secrets.GH_CONTENT_TOKEN }}
+          path: work
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install
+        run: |
+          pip install -q -r work/scraper/requirements.txt
+          python -m playwright install --with-deps chromium > /dev/null 2>&1
+      - name: Run
+        env:
+          TARGET_BASE_URL: ${{ secrets.TARGET_BASE_URL }}
+          DATA_API_URL:    ${{ secrets.DATA_API_URL }}
+          DATA_API_KEY:    ${{ secrets.DATA_API_KEY }}
+        run: python work/scraper/scrape.py --mode "${{ inputs.mode || 'incremental' }}" --job "${{ inputs.job_id || '' }}"
