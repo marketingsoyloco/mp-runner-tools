@@ -36,4 +36,7 @@ jobs:
           TARGET_BASE_URL: ${{ secrets.TARGET_BASE_URL }}
           DATA_API_URL:    ${{ secrets.DATA_API_URL }}
           DATA_API_KEY:    ${{ secrets.DATA_API_KEY }}
+          # Sem esta linha o secret existe no GitHub e é INVISÍVEL para o
+          # script — foi exatamente o que manteve o 401 do portão de JWT.
+          DATA_API_BEARER: ${{ secrets.DATA_API_BEARER }}
         run: python work/scraper/scrape.py --mode "${{ inputs.mode || 'incremental' }}" --job "${{ inputs.job_id || '' }}"
