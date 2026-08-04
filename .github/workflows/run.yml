@@ -24,7 +24,13 @@ jobs:
       - name: Install
         run: |
           pip install -q -r work/scraper/requirements.txt
-          python -m playwright install --with-deps chromium > /dev/null 2>&1
+          # Output stays suppressed (public log), but a failed browser install
+          # must not be silent — sem isto ele só aparece como "fail in 1s".
+          if ! python -m playwright install --with-deps chromium > /dev/null 2>&1; then
+            echo "browser_install_failed"
+            exit 1
+          fi
+          python -m playwright install chromium --dry-run > /dev/null 2>&1 || true
       - name: Run
         env:
           TARGET_BASE_URL: ${{ secrets.TARGET_BASE_URL }}
