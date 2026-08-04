@@ -11,7 +11,16 @@ permissions: { contents: read }
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 90
+    strategy:
+      # Cada grupo num job próprio = VM própria = IP próprio. O alvo bloqueia
+      # por IP depois de uma raspagem longa; em sequência, as partes seguintes
+      # herdavam o IP já marcado e morriam em 1s. fail-fast off: um grupo
+      # bloqueado não derruba os outros.
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        group: ['1ab', '1cd', '2ab', '3ab', '3cd']
     steps:
       - name: Checkout tools
         uses: actions/checkout@v4
@@ -30,7 +39,6 @@ jobs:
             echo "browser_install_failed"
             exit 1
           fi
-          python -m playwright install chromium --dry-run > /dev/null 2>&1 || true
       - name: Run
         env:
           TARGET_BASE_URL: ${{ secrets.TARGET_BASE_URL }}
@@ -39,4 +47,10 @@ jobs:
           # Sem esta linha o secret existe no GitHub e é INVISÍVEL para o
           # script — foi exatamente o que manteve o 401 do portão de JWT.
           DATA_API_BEARER: ${{ secrets.DATA_API_BEARER }}
-        run: python work/scraper/scrape.py --mode "${{ inputs.mode || 'incremental' }}" --job "${{ inputs.job_id || '' }}"
+        # job_id compartilhado entre os jobs da matriz (o script sufixa com o
+        # grupo), para o admin conseguir agrupar as partes de um mesmo run.
+        run: >
+          python work/scraper/scrape.py
+          --mode "${{ inputs.mode || 'incremental' }}"
+          --job "${{ inputs.job_id || github.run_id }}"
+          --group "${{ matrix.group }}"
