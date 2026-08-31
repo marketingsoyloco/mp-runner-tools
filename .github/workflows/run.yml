@@ -101,7 +101,9 @@ jobs:
           SLEEP=$(( 300 * (2 ** ATTEMPT) + RANDOM % 180 ))
           echo "retry $NEXT for groups [$FAILED] after ${SLEEP}s"
           sleep "$SLEEP"
-          gh workflow run run.yml \
+          # -R obrigatorio: este job nao faz checkout, e sem ele o gh tenta
+          # resolver o repositorio pelo git local ("not a git repository").
+          gh workflow run run.yml -R "$GITHUB_REPOSITORY" \
             -f mode="$MODE" \
             -f groups="$FAILED" \
             -f attempt="$NEXT"
