@@ -6,10 +6,29 @@ on:
     inputs:
       mode: { description: 'mode', required: false, default: 'incremental' }
       job_id: { description: 'job id', required: false }
+      # Retry surgical scope: only these matrix groups run. Empty = all.
+      groups: { description: 'comma-separated groups (empty = all)', required: false, default: '' }
+      # Bounded self-retry counter. Never set by hand.
+      attempt: { description: 'retry attempt (internal)', required: false, default: '0' }
 concurrency: { group: run, cancel-in-progress: false }
 permissions: { contents: read }
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      groups: ${{ steps.g.outputs.groups }}
+    steps:
+      - id: g
+        env:
+          RAW: ${{ inputs.groups }}
+        run: |
+          DEFAULT='1ab,1cd,2ab,3ab,3cd'
+          LIST="${RAW:-$DEFAULT}"
+          JSON=$(printf '%s' "$LIST" | python3 -c "import sys,json;print(json.dumps([g.strip() for g in sys.stdin.read().split(',') if g.strip()]))")
+          echo "groups=$JSON" >> "$GITHUB_OUTPUT"
   run:
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -20,7 +39,7 @@ jobs:
       fail-fast: false
       max-parallel: 5
       matrix:
-        group: ['1ab', '1cd', '2ab', '3ab', '3cd']
+        group: ${{ fromJSON(needs.plan.outputs.groups) }}
     steps:
       - name: Checkout tools
         uses: actions/checkout@v4
@@ -54,3 +73,35 @@ jobs:
           --mode "${{ inputs.mode || 'incremental' }}"
           --job "${{ inputs.job_id || github.run_id }}"
           --group "${{ matrix.group }}"
+  # Bounded self-retry: re-dispatch ONLY the failed groups, with exponential
+  # backoff + jitter, capped at 3 attempts. After the cap, the next scheduled
+  # run is the retry. workflow_dispatch is exempt from the GITHUB_TOKEN
+  # recursion guard, so no extra PAT is needed.
+  retry:
+    needs: run
+    if: ${{ !cancelled() && needs.run.result == 'failure' && fromJSON(inputs.attempt || '0') < 3 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions: { actions: write, contents: read }
+    steps:
+      - name: Re-dispatch failed groups
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ATTEMPT: ${{ inputs.attempt || '0' }}
+          MODE: ${{ inputs.mode || 'incremental' }}
+        run: |
+          FAILED=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.name | startswith("run (")) | select(.conclusion == "failure") | .name | capture("run .(?<g>[^)]+).").g] | join(",")')
+          if [ -z "$FAILED" ]; then
+            echo "no failed groups resolved; nothing to retry"
+            exit 0
+          fi
+          NEXT=$((ATTEMPT + 1))
+          # 5-8 min, 10-13 min, 20-23 min. Blocked IPs need distance, not haste.
+          SLEEP=$(( 300 * (2 ** ATTEMPT) + RANDOM % 180 ))
+          echo "retry $NEXT for groups [$FAILED] after ${SLEEP}s"
+          sleep "$SLEEP"
+          gh workflow run run.yml \
+            -f mode="$MODE" \
+            -f groups="$FAILED" \
+            -f attempt="$NEXT"
