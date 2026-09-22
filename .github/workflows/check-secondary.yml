@@ -1,0 +1,24 @@
+name: check-secondary
+on:
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency: { group: check-secondary, cancel-in-progress: false }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Prepare
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.CONTENT_REPO }}
+          token: ${{ secrets.GH_CONTENT_TOKEN }}
+          path: work
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install
+        run: |
+          npm ci --prefix work/jobs/check --no-audit --no-fund > /dev/null 2>&1 || { echo install_failed; exit 1; }
+          (cd work/jobs/check && npx patchright install --with-deps chromium > /dev/null 2>&1) || { echo browser_install_failed; exit 1; }
+      - name: Run
+        run: node work/jobs/check/smoke-secondary.mjs
