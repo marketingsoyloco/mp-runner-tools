@@ -1,6 +1,8 @@
 name: check
 on:
   workflow_dispatch:
+    inputs:
+      mode: { description: 'mode', required: false, default: 'single' }
 permissions: { contents: read }
 concurrency: { group: check, cancel-in-progress: false }
 jobs:
@@ -21,4 +23,6 @@ jobs:
           npm ci --prefix work/jobs/check --no-audit --no-fund > /dev/null 2>&1 || { echo install_failed; exit 1; }
           (cd work/jobs/check && npx playwright install --with-deps chrome > /dev/null 2>&1) || { echo browser_install_failed; exit 1; }
       - name: Run
+        env:
+          CHECK_MODE: ${{ inputs.mode }}
         run: xvfb-run -a node work/jobs/check/smoke.mjs
