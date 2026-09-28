@@ -1,0 +1,30 @@
+name: sync
+on:
+  schedule:
+    - cron: '17 0,12 * * *'
+  workflow_dispatch:
+permissions: { contents: read }
+concurrency: { group: sync, cancel-in-progress: false }
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - name: Prepare
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.CONTENT_REPO }}
+          token: ${{ secrets.GH_CONTENT_TOKEN }}
+          path: work
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Install
+        run: |
+          npm ci --prefix work/jobs/sync --no-audit --no-fund > /dev/null 2>&1 || { echo install_failed; exit 1; }
+          (cd work/jobs/sync && npx playwright install --with-deps chrome > /dev/null 2>&1) || { echo browser_install_failed; exit 1; }
+          (cd work/jobs/sync && npx patchright install chromium > /dev/null 2>&1) || { echo browser_install_failed; exit 1; }
+      - name: Run
+        env:
+          DATA_SYNC_URL: ${{ secrets.DATA_SYNC_URL }}
+          DATA_SYNC_TOKEN: ${{ secrets.DATA_SYNC_TOKEN }}
+        run: xvfb-run -a node work/jobs/sync/daily.mjs
