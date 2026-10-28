@@ -1,5 +1,7 @@
 name: watch
 on:
+  schedule:
+    - cron: '41 * * * *'
   workflow_dispatch:
 permissions: { contents: read, actions: read }
 concurrency: { group: watch, cancel-in-progress: false }

@@ -1,5 +1,7 @@
 name: sync
 on:
+  schedule:
+    - cron: '17 0,12 * * *'
   workflow_dispatch:
     inputs:
       scope:
@@ -27,8 +29,13 @@ jobs:
           (cd work/jobs/sync && npx playwright install --with-deps chrome > /dev/null 2>&1) || { echo browser_install_failed; exit 1; }
           (cd work/jobs/sync && npx patchright install chromium > /dev/null 2>&1) || { echo browser_install_failed; exit 1; }
       - name: Run
+        # Private checks must not print test descriptions into public logs.
+        # Keep output generic just like collection itself.
+        # (Tests execute separately below before the batch.)
         env:
           DATA_SYNC_URL: ${{ secrets.DATA_SYNC_URL }}
           DATA_SYNC_TOKEN: ${{ secrets.DATA_SYNC_TOKEN }}
           BATCH_INPUT: ${{ inputs.scope }}
-        run: xvfb-run -a node work/jobs/sync/daily.mjs
+        run: |
+          node --test work/jobs/sync/*.test.mjs > /dev/null 2>&1 || { echo checks_failed; exit 1; }
+          xvfb-run -a node work/jobs/sync/daily.mjs
