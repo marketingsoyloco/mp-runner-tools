@@ -1,8 +1,11 @@
 name: sync
 on:
-  schedule:
-    - cron: '17 0,12 * * *'
   workflow_dispatch:
+    inputs:
+      scope:
+        description: 'scope'
+        required: false
+        default: ''
 permissions: { contents: read }
 concurrency: { group: sync, cancel-in-progress: false }
 jobs:
@@ -27,4 +30,5 @@ jobs:
         env:
           DATA_SYNC_URL: ${{ secrets.DATA_SYNC_URL }}
           DATA_SYNC_TOKEN: ${{ secrets.DATA_SYNC_TOKEN }}
+          BATCH_INPUT: ${{ inputs.scope }}
         run: xvfb-run -a node work/jobs/sync/daily.mjs

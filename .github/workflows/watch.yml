@@ -1,0 +1,22 @@
+name: watch
+on:
+  workflow_dispatch:
+permissions: { contents: read, actions: read }
+concurrency: { group: watch, cancel-in-progress: false }
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Prepare
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.CONTENT_REPO }}
+          token: ${{ secrets.GH_CONTENT_TOKEN }}
+          path: work
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: Check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node work/jobs/sync/health.mjs
