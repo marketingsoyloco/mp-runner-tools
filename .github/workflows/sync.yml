@@ -26,8 +26,7 @@ jobs:
       - name: Install
         run: |
           npm ci --prefix work/jobs/sync --no-audit --no-fund > /dev/null 2>&1 || { echo install_failed; exit 1; }
-          (cd work/jobs/sync && npx playwright install --with-deps chrome > /dev/null 2>&1) || { echo browser_install_failed; exit 1; }
-          (cd work/jobs/sync && npx patchright install chromium > /dev/null 2>&1) || { echo browser_install_failed; exit 1; }
+          node work/jobs/sync/setup.mjs || { echo runtime_prepare_failed; exit 1; }
       - name: Run
         # Private checks must not print test descriptions into public logs.
         # Keep output generic just like collection itself.
