@@ -60,6 +60,7 @@ jobs:
           fi
       - name: Run
         env:
+          RUN_GROUPS_JSON: ${{ needs.plan.outputs.groups }}
           TARGET_BASE_URL: ${{ secrets.TARGET_BASE_URL }}
           DATA_API_URL:    ${{ secrets.DATA_API_URL }}
           DATA_API_KEY:    ${{ secrets.DATA_API_KEY }}
