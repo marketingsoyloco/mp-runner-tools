@@ -59,8 +59,12 @@ jobs:
             exit 1
           fi
       - name: Run
+        id: execute
         env:
           RUN_GROUPS_JSON: ${{ needs.plan.outputs.groups }}
+          RUN_MODE: ${{ inputs.mode || 'incremental' }}
+          RUN_JOB: ${{ inputs.job_id || github.run_id }}
+          RUN_GROUP: ${{ matrix.group }}
           TARGET_BASE_URL: ${{ secrets.TARGET_BASE_URL }}
           DATA_API_URL:    ${{ secrets.DATA_API_URL }}
           DATA_API_KEY:    ${{ secrets.DATA_API_KEY }}
@@ -69,11 +73,19 @@ jobs:
           DATA_API_BEARER: ${{ secrets.DATA_API_BEARER }}
         # job_id compartilhado entre os jobs da matriz (o script sufixa com o
         # grupo), para o admin conseguir agrupar as partes de um mesmo run.
-        run: >
-          python work/scraper/scrape.py
-          --mode "${{ inputs.mode || 'incremental' }}"
-          --job "${{ inputs.job_id || github.run_id }}"
-          --group "${{ matrix.group }}"
+        run: |
+          status=0
+          python work/scraper/scrape.py \
+            --mode "$RUN_MODE" \
+            --job "$RUN_JOB" \
+            --group "$RUN_GROUP" || status=$?
+          if [ "$status" -eq 75 ]; then
+            echo "defer=1" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$status"
+      - name: Defer
+        if: ${{ failure() && steps.execute.outputs.defer == '1' }}
+        run: echo deferred
   # Bounded self-retry: re-dispatch ONLY the failed groups, with exponential
   # backoff + jitter, capped at 3 attempts. After the cap, the next scheduled
   # run is the retry. workflow_dispatch is exempt from the GITHUB_TOKEN
@@ -92,7 +104,7 @@ jobs:
           MODE: ${{ inputs.mode || 'incremental' }}
         run: |
           FAILED=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
-            --jq '[.jobs[] | select(.name | startswith("run (")) | select(.conclusion == "failure") | .name | capture("run .(?<g>[^)]+).").g] | join(",")')
+            --jq '[.jobs[] | select(.name | startswith("run (")) | select(.conclusion == "failure") | select(any(.steps[]?; .name == "Defer" and .conclusion == "success") | not) | .name | capture("run .(?<g>[^)]+).").g] | join(",")')
           if [ -z "$FAILED" ]; then
             echo "no failed groups resolved; nothing to retry"
             exit 0
