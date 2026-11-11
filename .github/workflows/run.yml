@@ -56,13 +56,6 @@ jobs:
             if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then echo packages_install_timeout; else echo packages_install_failed; fi
             exit 1
           }
-      - name: Install browser dependencies
-        run: |
-          timeout --kill-after=15s 5m python -m playwright install-deps chromium > /dev/null 2>&1 || {
-            status=$?
-            if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then echo browser_deps_timeout; else echo browser_deps_failed; fi
-            exit 1
-          }
       - name: Install browser
         run: |
           timeout --kill-after=15s 5m python -m playwright install chromium > /dev/null 2>&1 || {
@@ -70,6 +63,25 @@ jobs:
             if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then echo browser_install_timeout; else echo browser_install_failed; fi
             exit 1
           }
+      - name: Verify browser runtime
+        run: |
+          probe_browser() {
+            timeout --kill-after=5s 30s python -c 'from playwright.sync_api import sync_playwright; p = sync_playwright().start(); browser = p.chromium.launch(headless=True, timeout=20000); browser.close(); p.stop()' > /dev/null 2>&1
+          }
+          if probe_browser; then
+            echo browser_ready
+            exit 0
+          fi
+          timeout --kill-after=15s 5m python -m playwright install-deps chromium > /dev/null 2>&1 || {
+            status=$?
+            if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then echo browser_deps_timeout; else echo browser_deps_failed; fi
+            exit 1
+          }
+          if ! probe_browser; then
+            echo browser_launch_failed
+            exit 1
+          fi
+          echo browser_ready
       - name: Run
         id: execute
         env:
