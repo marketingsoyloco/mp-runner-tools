@@ -50,6 +50,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Install packages
+        id: packages
         run: |
           timeout --kill-after=15s 5m pip install -q -r work/scraper/requirements.txt > /dev/null 2>&1 || {
             status=$?
@@ -57,6 +58,7 @@ jobs:
             exit 1
           }
       - name: Install browser
+        id: browser
         run: |
           timeout --kill-after=15s 5m python -m playwright install chromium > /dev/null 2>&1 || {
             status=$?
@@ -64,6 +66,7 @@ jobs:
             exit 1
           }
       - name: Verify browser runtime
+        id: browser_runtime
         run: |
           probe_browser() {
             timeout --kill-after=5s 30s python -c 'from playwright.sync_api import sync_playwright; p = sync_playwright().start(); browser = p.chromium.launch(headless=True, timeout=20000); browser.close(); p.stop()' > /dev/null 2>&1
@@ -82,6 +85,20 @@ jobs:
             exit 1
           fi
           echo browser_ready
+      - name: Report setup failure
+        if: ${{ failure() && (steps.packages.outcome == 'failure' || steps.browser.outcome == 'failure' || steps.browser_runtime.outcome == 'failure') }}
+        env:
+          RUN_GROUPS_JSON: ${{ needs.plan.outputs.groups }}
+          RUN_MODE: ${{ inputs.mode || 'incremental' }}
+          RUN_JOB: ${{ inputs.job_id || github.run_id }}
+          RUN_GROUP: ${{ matrix.group }}
+          SETUP_FAILURE: ${{ steps.packages.outcome == 'failure' && 'packages_install' || steps.browser.outcome == 'failure' && 'browser_install' || 'browser_runtime' }}
+          DATA_API_URL: ${{ secrets.DATA_API_URL }}
+          DATA_API_KEY: ${{ secrets.DATA_API_KEY }}
+          DATA_API_BEARER: ${{ secrets.DATA_API_BEARER }}
+        run: |
+          timeout --kill-after=5s 30s python work/scraper/scrape.py \
+            --mode "$RUN_MODE" --job "$RUN_JOB" --group "$RUN_GROUP" --setup-failure "$SETUP_FAILURE"
       - name: Run
         id: execute
         env:
