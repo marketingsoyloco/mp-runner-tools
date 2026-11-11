@@ -56,9 +56,16 @@ jobs:
             if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then echo packages_install_timeout; else echo packages_install_failed; fi
             exit 1
           }
+      - name: Install browser dependencies
+        run: |
+          timeout --kill-after=15s 5m python -m playwright install-deps chromium > /dev/null 2>&1 || {
+            status=$?
+            if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then echo browser_deps_timeout; else echo browser_deps_failed; fi
+            exit 1
+          }
       - name: Install browser
         run: |
-          timeout --kill-after=15s 5m python -m playwright install --with-deps chromium > /dev/null 2>&1 || {
+          timeout --kill-after=15s 5m python -m playwright install chromium > /dev/null 2>&1 || {
             status=$?
             if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then echo browser_install_timeout; else echo browser_install_failed; fi
             exit 1
